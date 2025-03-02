@@ -1,0 +1,16 @@
+[project]
+name = "sound-level-exporter"
+version = "0.1.0"
+description = "A Prometheus exporter to collect sound level."
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "numpy~=2.2.3",
+    "prometheus_client~=0.21.1",
+    "PyAudio~=0.2.14",
+]
+
+[project.scripts]
+sound-level-exporter = "sound_level_exporter:app"
