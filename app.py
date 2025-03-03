@@ -32,7 +32,7 @@ def compute_rms(data):
     if data.size <= 0:
         return 0
     normalized_data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.sqrt(np.mean(np.square(normalized_data)))
+    return np.sqrt(np.mean(np.square(normalized_data, dtype=np.float64)))
 
 
 def compute_db(rms):
