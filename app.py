@@ -15,6 +15,7 @@ SAMPLING_INTERVAL = int(os.getenv('SOUND_LEVEL_EXPORTER_SAMPLING_INTERVAL', '3')
 NAMESPACE = 'sound_level'
 CHUNK_SIZE = 1024
 LABELS = ['device_name']
+RMS = Gauge('rms', 'Sound level in root mean square of signal level', LABELS, namespace=NAMESPACE)
 LEVEL = Gauge('level', 'Sound level in dB', LABELS, namespace=NAMESPACE)
 
 
@@ -24,7 +25,20 @@ logging.basicConfig(
     level=LOG_LEVEL,
     stream=sys.stderr,
 )
-logger = logging.getLogger('switchbot-local-exporter')
+logger = logging.getLogger('sound-level-exporter')
+
+
+def compute_rms(data):
+    if data.size <= 0:
+        return 0
+    normalized_data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.sqrt(np.mean(np.square(normalized_data)))
+
+
+def compute_db(rms):
+    if rms <= 0:
+        return 0
+    return 20 * np.log10(rms)
 
 
 def main():
@@ -39,15 +53,23 @@ def main():
     )
     try:
         while True:
-            buf = stream.read(CHUNK_SIZE, exception_on_overflow=False)
-            data = np.frombuffer(buf, dtype=np.int16)
-            rms = np.sqrt(np.mean(np.square(data)))
-            db = 20 * np.log10(rms) if rms > 0 else 0
-            labels = {
-                'device_name': device_info['name'],
-            }
-            LEVEL.labels(**labels).set(db)
-            time.sleep(SAMPLING_INTERVAL)
+            start_time = time.monotonic()
+            max_rms = 0
+            max_db = 0
+
+            while time.monotonic() - start_time < SAMPLING_INTERVAL:
+                buf = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                data = np.frombuffer(buf, dtype=np.int16)
+                rms = compute_rms(data)
+                max_rms = max(max_rms, rms)
+                db = compute_db(rms)
+                max_db = max(max_db, db)
+
+            labels = {'device_name': device_info['name']}
+            RMS.labels(**labels).set(max_rms)
+            logger.debug(f'Max RMS over {SAMPLING_INTERVAL}s: {max_rms}')
+            LEVEL.labels(**labels).set(max_db)
+            logger.debug(f'Max dB over {SAMPLING_INTERVAL}s: {max_db} dB')
     except KeyboardInterrupt:
         logger.info("Quit collecting sound level.")
         stream.stop_stream()
